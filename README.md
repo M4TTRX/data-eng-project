@@ -8,4 +8,7 @@
 4. Build and run the environment using the `docker-compose up` command (run it in the directory of the project). This step will take a while as a lot of images will be downloaded on your computer.
 5. 
 
-# Data Sources
+# Data Sources:
+réacteurs nucléaires: https://www.data.gouv.fr/fr/datasets/centrales-de-production-nucleaire-dedf-sa/
+centrales thermiques: https://www.data.gouv.fr/fr/datasets/centrales-de-production-thermique-a-flamme-dedf-sa-fioul-gaz-charbon/
+décès: https://www.data.gouv.fr/fr/datasets/fichier-des-personnes-decedees/
