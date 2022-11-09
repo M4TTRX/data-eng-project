@@ -3,12 +3,12 @@
 
 | Student name  | GitHub profile                                   |
 | :------------ | ------------------------------------------------ |
-| Ewen CHAILLAN | [M4TTRX](https://github.com/M4TTRX               |
-| Matthieu ROUX | [EwenChaillann](https://github.com/EwenChaillann |
+| Matthieu ROUX | [M4TTRX](https://github.com/M4TTRX               |
+| Ewen CHAILLAN | [EwenChaillann](https://github.com/EwenChaillann |
 
 # Project Description
 
-The goal of the project is to create a data pipeline that ingests data of deaths in france along with place of death and locations of active nuclear and thermal energy plants  in france and see if there is any correlation between the two. We don't have any pre existing work that proves that there is or isn't a correlation but we thought it would be fun to see. 
+The goal of the project is to create a data pipeline that ingests data of deaths in france along with place of death and locations of active nuclear and thermal power plants  in france and see if there is any correlation between the two. We don't have any pre existing work that proves that there is or isn't a correlation but we thought it would be fun to see. 
 
 ## Data Sources:
 All the data we will be extracting comes from the french government's data warehouse: [data.gouv.fr](https://www.data.gouv.fr/fr/): 
