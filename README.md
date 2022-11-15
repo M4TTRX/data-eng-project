@@ -3,8 +3,8 @@
 
 | Student name  | GitHub profile                                   |
 | :------------ | ------------------------------------------------ |
-| Matthieu ROUX | [M4TTRX](https://github.com/M4TTRX               |
-| Ewen CHAILLAN | [EwenChaillann](https://github.com/EwenChaillann |
+| Matthieu ROUX | [M4TTRX](https://github.com/M4TTRX)              |
+| Ewen CHAILLAN | [EwenChaillann](https://github.com/EwenChaillann)|
 
 # Project Description
 
