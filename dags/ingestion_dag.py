@@ -3,6 +3,10 @@ import datetime
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 
+DEATH_DATASET_ID = '5de8f397634f4164071119c5'
+GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
+# DAG definition
+
 default_args_dict = {
     'start_date': airflow.utils.dates.days_ago(0),
     'concurrency': 1,
@@ -17,6 +21,21 @@ ingestion_dag = DAG(
     catchup=False,
 )
 
+# Python functions
+# ===================
+
+def pull_death_file_list():
+    import requests
+    try:
+        data = requests.get(GET_DEATH_DATASET_URL).json()
+    except:
+        print("An error occured when pulling the death file list")
+        return
+    data
+
+
+# Operator definition
+# ===================
 # Downloading a file from an API/endpoint?
 
 task_one = BashOperator(
