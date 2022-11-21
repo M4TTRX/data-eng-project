@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# logs
+logs/scheduler/latest
+
+# downloaded data 
+dags/data/ingestion/
