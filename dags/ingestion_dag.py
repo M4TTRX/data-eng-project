@@ -85,7 +85,7 @@ def pull_all_death_files(max_resource=5):
 
 def pull_nuclear_plants():
     import json
-    response = json.load(open('{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
+    response = json.load(open(f'{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
     import requests
     for resource in response['resources']:
         if resource['format'] == 'csv':
@@ -110,7 +110,7 @@ start = DummyOperator(
 get_nuclear_json = BashOperator(
     task_id='get_nuclear_json',
     dag=ingestion_dag,
-    bash_command=f'curl https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90e9ce487174/ --output /opt/airflow/{INGESTION_DATA_PATH}nuclear_plants.json',
+    bash_command=f'curl {GET_NUCLEAR_DATAET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
 )
 
 get_nuclear_data = PythonOperator(
