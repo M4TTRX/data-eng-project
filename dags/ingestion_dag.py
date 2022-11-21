@@ -6,6 +6,7 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
+INGESTION_DATAPATH = 'dags/data/ingestion/'
 GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
 # DAG definition
 
@@ -33,15 +34,15 @@ def pull_death_file_list():
     try:
         data = requests.get(GET_DEATH_DATASET_URL).json()
     except:
-        print("An error occurred when pulling the death file list")
+        print('An error occurred when pulling the death file list')
     json_object = json.dumps(data['resources'])
-    with open("dags/data/death_resources.json", "w") as outfile:
+    with open(f'{INGESTION_DATAPATH}death_resources.json', 'w') as outfile:
         outfile.write(json_object)
-    print("An error occurred when saving the list")
+    print('An error occurred when saving the list')
 
 def pull_all_death_files(max_resource = 2):
     import json
-    death_resources = json.load(open('dags/data/ingestion/death_resources.json', 'r'))
+    death_resources = json.load(open(f'{INGESTION_DATAPATH}death_resources.json', 'r'))
     import requests
     count = 0
     for resource in death_resources:
@@ -53,7 +54,7 @@ def pull_all_death_files(max_resource = 2):
         # pull the latest resource data
         response = requests.get(resource['latest'])
         if response.status_code == 200:
-            with open(f'dags/data/ingestion/death_{resource["title"]}', 'w') as outfile:
+            with open(f'{INGESTION_DATAPATH}death_{resource["title"]}', 'w') as outfile:
                 outfile.write(response.content.decode("utf-8"))
         else:
             print(f'Failed to get resource: {resource["title"]} at url {resource["latest"]}')
@@ -92,24 +93,17 @@ get_thermal_json = BashOperator(
 
 get_thermal_datas = PythonOperator(
     task_id='get_thermal_datas',
-    dag=ingestion_dag, 
-    dag=ingestion_dag,   
+    dag=ingestion_dag,  
     python_callable=_get_spreadsheet,
     op_kwargs={},
     trigger_rule='all_success',
     depends_on_past=False,  
 )
 
-get_death_json = BashOperator(
-    task_id='get_deaths_json',
-    dag=ingestion_dag,
-    bash_command="curl https://www.data.gouv.fr/api/1/datasets/5de8f397634f4164071119c5/ --output /opt/airflow/dags/deaths.json",
-)
 
 get_death_resource_list = PythonOperator(
     task_id='get_death_resource_list',
     dag=ingestion_dag,  
-    dag=ingestion_dag,   
     python_callable=pull_death_file_list,
     op_kwargs={},
     trigger_rule='all_success',
@@ -118,8 +112,7 @@ get_death_resource_list = PythonOperator(
 
 get_death_resources = PythonOperator(
     task_id='get_death_resources',
-    dag=ingestion_dag,  
-    dag=ingestion_dag,   
+    dag=ingestion_dag,     
     python_callable=pull_all_death_files,
     op_kwargs={},
     trigger_rule='all_success',
