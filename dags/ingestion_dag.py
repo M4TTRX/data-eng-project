@@ -2,6 +2,8 @@ import airflow
 import datetime
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
+from airflow.operators.dummy_operator import DummyOperator
+from airflow.operators.python_operator import PythonOperator
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
 GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
@@ -58,27 +60,67 @@ def pull_all_death_files(max_resource = 2):
 
 # Operator definition
 # ===================
-# Downloading a file from an API/endpoint?
 
-task_one = BashOperator(
-    task_id='get_nuclear_datas',
+start = DummyOperator(
+    task_id='start',
+    dag=ingestion_dag,
+)
+
+get_nuclear_json = BashOperator(
+    task_id='get_nuclear_json',
     dag=ingestion_dag,
     bash_command="curl https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90e9ce487174/ --output /opt/airflow/dags/nuclear_plants.json",
 )
 
-# oh noes :( it's xlsx... let's make it a csv.
+get_nuclear_datas = PythonOperator(
+    task_id='get_nuclear_datas',
+    dag=ingestion_dag,   
+    python_callable=_get_spreadsheet,
+    op_kwargs={},
+    trigger_rule='all_success',
+    depends_on_past=False,
+) 
 
-task_two = BashOperator(
-    task_id='get_thermal_plants_datas',
+get_thermal_json = BashOperator(
+    task_id='get_thermal_plants_json',
     dag=ingestion_dag,
     bash_command="curl https://www.data.gouv.fr/api/1/datasets/63587afb1cc488641390f68e/ --output /opt/airflow/dags/thermal_plants.json",
 )
 
-task_three = BashOperator(
-    task_id='get_deaths_datas',
+get_thermal_datas = PythonOperator(
+    task_id='get_thermal_datas',
+    dag=ingestion_dag, 
+    dag=ingestion_dag,   
+    python_callable=_get_spreadsheet,
+    op_kwargs={},
+    trigger_rule='all_success',
+    depends_on_past=False,  
+)
+
+get_death_json = BashOperator(
+    task_id='get_deaths_json',
     dag=ingestion_dag,
     bash_command="curl https://www.data.gouv.fr/api/1/datasets/5de8f397634f4164071119c5/ --output /opt/airflow/dags/deaths.json",
 )
 
+get_death_datas = PythonOperator(
+    task_id='get_death_datas',
+    dag=ingestion_dag,  
+    dag=ingestion_dag,   
+    python_callable=_get_spreadsheet,
+    op_kwargs={},
+    trigger_rule='all_success',
+    depends_on_past=False, 
+)
 
-task_three >> task_one >> task_two 
+end = DummyOperator(
+    task_id='end',
+    dag=ingestion_dag,   
+)
+
+
+start >> [get_nuclear_json,get_death_json,get_thermal_json]
+get_nuclear_json >> get_nuclear_datas
+get_death_json >> get_death_datas
+get_thermal_json >> get_thermal_datas
+[get_nuclear_datas,get_death_datas,get_thermal_datas] >> end
