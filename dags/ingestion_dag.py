@@ -6,8 +6,12 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
+THERMAL_DATASET_ID = '63587afb1cc488641390f68e'
+NUCLEAR_DATASET_ID = '63587afc1e8e90e9ce487174'
 INGESTION_DATAPATH = 'dags/data/ingestion/'
 GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
+GET_THERMAL_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{THERMAL_DATASET_ID}/'
+GET_NUCLEAR_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{NUCLEAR_DATASET_ID}/'
 # DAG definition
 
 default_args_dict = {
@@ -26,6 +30,23 @@ ingestion_dag = DAG(
 
 # Python functions
 # ===================
+
+def pull_thermal_plants_datas():
+    import json
+    thermal_resources = json.load(open('dags/data/ingestion/thermal_plants.json', 'r'))
+    import requests
+    count = 0
+    for resource in thermal_resources['resources']:
+        count += 1
+        if count > 1:
+            break
+
+        response = requests.get(resource['latest'])
+        if response.status_code == 200:
+            with open(f'dags/data/ingestion/thermal_plants_{resource["title"]}.csv', 'w') as outfile:
+                outfile.write(response.content.decode("utf-8"))
+        else:
+            print(f'Failed to get resource: {resource["title"]} at url {resource["latest"]}')  
 
 def pull_death_file_list():
     import requests
@@ -88,13 +109,13 @@ get_nuclear_datas = PythonOperator(
 get_thermal_json = BashOperator(
     task_id='get_thermal_plants_json',
     dag=ingestion_dag,
-    bash_command="curl https://www.data.gouv.fr/api/1/datasets/63587afb1cc488641390f68e/ --output /opt/airflow/dags/thermal_plants.json",
+    bash_command=f'curl {GET_THERMAL_DATASET_URL} --output /opt/airflow/{INGESTION_DATAPATH}/thermal_plants.json',
 )
 
 get_thermal_datas = PythonOperator(
     task_id='get_thermal_datas',
     dag=ingestion_dag,  
-    python_callable=_get_spreadsheet,
+    python_callable=pull_thermal_plants_datas,
     op_kwargs={},
     trigger_rule='all_success',
     depends_on_past=False,  

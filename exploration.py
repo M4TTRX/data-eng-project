@@ -34,4 +34,21 @@ def pull_all_death_files(max_resource = 2):
         else:
             print(f'Failed to get resource: {resource["title"]} at url {resource["latest"]}')
 
-pull_all_death_files()
+def pull_thermal_plants_datas():
+    import json
+    thermal_resources = json.load(open('dags/data/ingestion/thermal_plants.json', 'r'))
+    import requests
+    count = 0
+    for resource in thermal_resources['resources']:
+        count += 1
+        if count > 1:
+            break
+
+        response = requests.get(resource['latest'])
+        if response.status_code == 200:
+            with open(f'dags/data/ingestion/thermal_plants_{resource["title"]}.csv', 'w') as outfile:
+                outfile.write(response.content.decode("utf-8"))
+        else:
+            print(f'Failed to get resource: {resource["title"]} at url {resource["latest"]}')          
+
+pull_thermal_plants_datas()
