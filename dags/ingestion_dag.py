@@ -122,6 +122,7 @@ get_death_resources = PythonOperator(
 end = DummyOperator(
     task_id='end',
     dag=ingestion_dag,   
+    trigger_rule='all_success'
 )
 
 
