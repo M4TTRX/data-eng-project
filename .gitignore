@@ -130,3 +130,6 @@ dmypy.json
 
 # logs
 logs/scheduler/latest
+
+# downloaded data 
+dags/data/ingestion/
