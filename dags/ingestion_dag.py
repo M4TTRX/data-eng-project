@@ -60,7 +60,7 @@ def pull_all_death_files(max_resource = 2):
 
 def _get_spreadsheet():
     return
-    
+
 # Operator definition
 # ===================
 
@@ -106,11 +106,21 @@ get_death_json = BashOperator(
     bash_command="curl https://www.data.gouv.fr/api/1/datasets/5de8f397634f4164071119c5/ --output /opt/airflow/dags/deaths.json",
 )
 
-get_death_datas = PythonOperator(
-    task_id='get_death_datas',
+get_death_resource_list = PythonOperator(
+    task_id='get_death_resource_list',
     dag=ingestion_dag,  
     dag=ingestion_dag,   
-    python_callable=_get_spreadsheet,
+    python_callable=pull_death_file_list,
+    op_kwargs={},
+    trigger_rule='all_success',
+    depends_on_past=False, 
+)
+
+get_death_resources = PythonOperator(
+    task_id='get_death_resources',
+    dag=ingestion_dag,  
+    dag=ingestion_dag,   
+    python_callable=pull_all_death_files,
     op_kwargs={},
     trigger_rule='all_success',
     depends_on_past=False, 
@@ -122,8 +132,9 @@ end = DummyOperator(
 )
 
 
-start >> [get_nuclear_json,get_death_json,get_thermal_json]
+
+start >> [get_nuclear_json,get_death_resource_list,get_thermal_json]
 get_nuclear_json >> get_nuclear_datas
-get_death_json >> get_death_datas
+get_death_resource_list >> get_death_resources
 get_thermal_json >> get_thermal_datas
-[get_nuclear_datas,get_death_datas,get_thermal_datas] >> end
+[get_nuclear_datas,get_death_resources,get_thermal_datas] >> end
