@@ -62,6 +62,21 @@ def pull_all_death_files(max_resource = 2):
 def _get_spreadsheet():
     return
 
+def pull_nuclear_plants():
+    import json
+    response = json.load(open('{INGESTION_DATAPATH}nuclear_plants.json', 'r'))
+    import requests
+    for resource in response['resources']:
+        if resource['format'] == 'csv':
+            csv_resource = requests.get(resource['latest'])
+            if csv_resource.status_code == 200:
+                with open(f'{INGESTION_DATAPATH}nuclear_{resource["last_modified"]}.csv', 'w') as outfile:
+                    outfile.write(csv_resource.content.decode("utf-8"))
+            else:
+                print(f'Failed to extract nuclear plant data')
+            return
+    print('Could not file resource in csv format')
+
 # Operator definition
 # ===================
 
@@ -73,13 +88,13 @@ start = DummyOperator(
 get_nuclear_json = BashOperator(
     task_id='get_nuclear_json',
     dag=ingestion_dag,
-    bash_command="curl https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90e9ce487174/ --output /opt/airflow/dags/nuclear_plants.json",
+    bash_command=f'curl https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90e9ce487174/ --output /opt/airflow/{INGESTION_DATAPATH}nuclear_plants.json',
 )
 
 get_nuclear_datas = PythonOperator(
     task_id='get_nuclear_datas',
     dag=ingestion_dag,   
-    python_callable=_get_spreadsheet,
+    python_callable=pull_nuclear_plants,
     op_kwargs={},
     trigger_rule='all_success',
     depends_on_past=False,
