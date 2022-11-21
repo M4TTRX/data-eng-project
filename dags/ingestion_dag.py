@@ -58,6 +58,9 @@ def pull_all_death_files(max_resource = 2):
         else:
             print(f'Failed to get resource: {resource["title"]} at url {resource["latest"]}')
 
+def _get_spreadsheet():
+    return
+    
 # Operator definition
 # ===================
 
