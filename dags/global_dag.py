@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.utils.task_group import TaskGroup
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
 THERMAL_DATASET_ID = '63587afb1cc488641390f68e'
@@ -22,8 +23,8 @@ default_args_dict = {
     'retry_delay': datetime.timedelta(minutes=5),
 }
 
-ingestion_dag = DAG(
-    dag_id='ingestion_dag',
+global_dag = DAG(
+    dag_id='global_dag',
     default_args=default_args_dict,
     catchup=False,
 )
@@ -102,69 +103,83 @@ def pull_nuclear_plants():
 # ===================
 
 
-start = DummyOperator(
-    task_id='start',
-    dag=ingestion_dag,
-)
+with TaskGroup("ingestion_pipeline","data ingestion step",dag=global_dag) as ingestion_pipeline:
+    start = DummyOperator(
+        task_id='start',
+        dag=global_dag,
+    )
 
-get_nuclear_json = BashOperator(
-    task_id='get_nuclear_json',
-    dag=ingestion_dag,
-    bash_command=f'curl {GET_NUCLEAR_DATAET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
-)
+    get_nuclear_json = BashOperator(
+        task_id='get_nuclear_json',
+        dag=global_dag,
+        bash_command=f'curl {GET_NUCLEAR_DATAET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
+    )
 
-get_nuclear_data = PythonOperator(
-    task_id='get_nuclear_data',
-    dag=ingestion_dag,
-    python_callable=pull_nuclear_plants,
-    op_kwargs={},
-    trigger_rule='all_success',
-    depends_on_past=False,
-)
+    get_nuclear_data = PythonOperator(
+        task_id='get_nuclear_data',
+        dag=global_dag,
+        python_callable=pull_nuclear_plants,
+        op_kwargs={},
+        trigger_rule='all_success',
+        depends_on_past=False,
+    )
 
-get_thermal_json = BashOperator(
-    task_id='get_thermal_plants_json',
-    dag=ingestion_dag,
-    bash_command=f'curl {GET_THERMAL_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/thermal_plants.json',
-)
+    get_thermal_json = BashOperator(
+        task_id='get_thermal_plants_json',
+        dag=global_dag,
+        bash_command=f'curl {GET_THERMAL_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/thermal_plants.json',
+    )
 
-get_thermal_data = PythonOperator(
-    task_id='get_thermal_data',
-    dag=ingestion_dag,
-    python_callable=pull_thermal_plants_data,
-    op_kwargs={},
-    trigger_rule='all_success',
-    depends_on_past=False,
-)
+    get_thermal_data = PythonOperator(
+        task_id='get_thermal_data',
+        dag=global_dag,
+        python_callable=pull_thermal_plants_data,
+        op_kwargs={},
+        trigger_rule='all_success',
+        depends_on_past=False,
+    )
 
 
-get_death_resource_list = PythonOperator(
-    task_id='get_death_resource_list',
-    dag=ingestion_dag,
-    python_callable=pull_death_file_list,
-    op_kwargs={},
-    trigger_rule='all_success',
-    depends_on_past=False,
-)
+    get_death_resource_list = PythonOperator(
+        task_id='get_death_resource_list',
+        dag=global_dag,
+        python_callable=pull_death_file_list,
+        op_kwargs={},
+        trigger_rule='all_success',
+        depends_on_past=False,
+    )
 
-get_death_resources = PythonOperator(
-    task_id='get_death_resources',
-    dag=ingestion_dag,
-    python_callable=pull_all_death_files,
-    op_kwargs={},
-    trigger_rule='all_success',
-    depends_on_past=False,
-)
+    get_death_resources = PythonOperator(
+        task_id='get_death_resources',
+        dag=global_dag,
+        python_callable=pull_all_death_files,
+        op_kwargs={},
+        trigger_rule='all_success',
+        depends_on_past=False,
+    )
 
-end = DummyOperator(
-    task_id='end',
-    dag=ingestion_dag,
+    end = DummyOperator(
+        task_id='end',
+        dag=global_dag,
+        trigger_rule='all_success'
+    )
+
+    start >> [get_nuclear_json, get_death_resource_list, get_thermal_json]
+    get_nuclear_json >> get_nuclear_data
+    get_death_resource_list >> get_death_resources
+    get_thermal_json >> get_thermal_data
+    [get_nuclear_data, get_death_resources, get_thermal_data] >> end
+
+start_global = DummyOperator(
+    task_id='start_global',
+    dag=global_dag,
     trigger_rule='all_success'
 )
 
+end_global = DummyOperator(
+    task_id='end_global',
+    dag=global_dag,
+    trigger_rule='all_success'
+)
 
-start >> [get_nuclear_json, get_death_resource_list, get_thermal_json]
-get_nuclear_json >> get_nuclear_data
-get_death_resource_list >> get_death_resources
-get_thermal_json >> get_thermal_data
-[get_nuclear_data, get_death_resources, get_thermal_data] >> end
+start_global >> ingestion_pipeline >> end_global
