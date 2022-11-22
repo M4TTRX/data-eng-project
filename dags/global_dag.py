@@ -14,19 +14,14 @@ THERMAL_DATASET_ID = '63587afb1cc488641390f68e'
 NUCLEAR_DATASET_ID = '63587afc1e8e90e9ce487174'
 CITY_GEO_DATA_ID = 'dbe8a621-a9c4-4bc3-9cae-be1699c5ff25'
 INGESTION_DATA_PATH = 'dags/data/ingestion/'
-<<<<<<< Updated upstream
 DATA_GOUV_BASE_URL = 'https://www.data.gouv.fr/api/1/datasets/'
 GET_DEATH_DATASET_URL = DATA_GOUV_BASE_URL + DEATH_DATASET_ID
-GET_THERMAL_DATASET_URL = DATA_GOUV_BASE_URL + THERMAL_DATASET_ID
-GET_NUCLEAR_DATASET_URL = DATA_GOUV_BASE_URL + NUCLEAR_DATASET_ID
+GET_THERMAL_DATASET_URL = 'https://www.data.gouv.fr/api/1/datasets/63587afb1cc488641390f68e/'
+GET_NUCLEAR_DATAET_URL = 'https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90e9ce487174/'
 CITY_GEO_DATASET_URL = 'https://static.data.gouv.fr/resources/communes-de-france-base-des-codes-postaux/20200309-131459/communes-departement-region.csv'
-=======
-GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
-GET_THERMAL_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{THERMAL_DATASET_ID}/'
-GET_NUCLEAR_DATAET_URL = f'https://www.data.gouv.fr/api/1/datasets/{NUCLEAR_DATASET_ID}/'
-INGESTION_DATA_PATH = 'dags/data/ingestion/'
 STAGING_DATA_PATH = 'dags/data/staging/'
->>>>>>> Stashed changes
+
+
 # DAG definition
 
 default_args_dict = {
@@ -54,6 +49,7 @@ def load_and_clean_thermal_datas():
                            'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power (MW)'})
     data_1.to_csv('./dags/data/staging/thermal_plants_clean.csv')
 
+
 def load_and_clean_nuclear_datas():
     data_1 = pd.read_csv('./dags/data/ingestion/nuclear.csv',
                          error_bad_lines=False, sep=';')
@@ -63,11 +59,13 @@ def load_and_clean_nuclear_datas():
                            'commune': 'city', 'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power (MW)'})
     data_1.to_csv('./dags/data/staging/nuclear_clean_datas.csv')
 
+
 def get_redis_client():
     import redis
     return redis.Redis(host='redis', port=6379, db=0)
 
-def load_death_data_from_ingestion():
+
+def load_data_from_ingestion():
     import os
     death_files = [os.path.join(root, name)
                    for root, dirs, files in os.walk(INGESTION_DATA_PATH)
@@ -101,6 +99,7 @@ def load_death_data_from_ingestion():
         print(f'{file} successfully imported')
     # preliminary processing and store
     return
+
 
 def _cleanse_death_data():
     import json
@@ -182,8 +181,7 @@ def pull_all_death_files(max_resource=5):
 
 def pull_nuclear_plants():
     import json
-    response = json.load(
-        open(f'{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
+    response = json.load(open(f'{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
     import requests
     for resource in response['resources']:
         if resource['format'] == 'csv':
@@ -200,20 +198,20 @@ def pull_nuclear_plants():
 # ===================
 
 
-with TaskGroup("ingestion_pipeline", "data ingestion step", dag=global_dag) as ingestion_pipeline:
+with TaskGroup("ingestion_pipeline","data ingestion step",dag=global_dag) as ingestion_pipeline:
     start = DummyOperator(
         task_id='start',
         dag=global_dag,
     )
 
-    get_nuclear_plants_json = BashOperator(
-        task_id='get_nuclear_plants_json',
+    get_nuclear_json = BashOperator(
+        task_id='get_nuclear_json',
         dag=global_dag,
-        bash_command=f'curl {GET_NUCLEAR_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
+        bash_command=f'curl {GET_NUCLEAR_DATAET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
     )
 
-    get_nuclear_plants_data = PythonOperator(
-        task_id='get_nuclear_plants_data',
+    get_nuclear_data = PythonOperator(
+        task_id='get_nuclear_data',
         dag=global_dag,
         python_callable=pull_nuclear_plants,
         op_kwargs={},
@@ -221,7 +219,7 @@ with TaskGroup("ingestion_pipeline", "data ingestion step", dag=global_dag) as i
         depends_on_past=False,
     )
 
-    get_thermal_plants_json = BashOperator(
+    get_thermal_json = BashOperator(
         task_id='get_thermal_plants_json',
         dag=global_dag,
         bash_command=f'curl {GET_THERMAL_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/thermal_plants.json',
@@ -235,11 +233,7 @@ with TaskGroup("ingestion_pipeline", "data ingestion step", dag=global_dag) as i
         trigger_rule='all_success',
         depends_on_past=False,
     )
-    get_city_code_geo = BashOperator(
-        task_id='get_city_code_geo',
-        dag=global_dag,
-        bash_command=f'curl {CITY_GEO_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/city_geo_loc.csv',
-    )
+
 
     get_death_resource_list = PythonOperator(
         task_id='get_death_resource_list',
@@ -259,17 +253,23 @@ with TaskGroup("ingestion_pipeline", "data ingestion step", dag=global_dag) as i
         depends_on_past=False,
     )
 
+    get_city_code_geo = BashOperator(
+        task_id='get_city_code_geo',
+        dag=global_dag,
+        bash_command=f'curl {CITY_GEO_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/city_geo_loc.csv',
+    )
+
     end = DummyOperator(
         task_id='end',
         dag=global_dag,
         trigger_rule='all_success'
     )
 
-    start >> [get_nuclear_plants_json, get_death_resource_list, get_thermal_plants_json]
-    get_nuclear_plants_json >> get_nuclear_plants_data
+    start >> [get_city_code_geo, get_nuclear_json, get_death_resource_list, get_thermal_json]
+    get_nuclear_json >> get_nuclear_data
     get_death_resource_list >> get_death_resources
-    get_thermal_plants_json >> get_thermal_data
-    [get_nuclear_plants_data, get_death_resources, get_thermal_data] >> end
+    get_thermal_json >> get_thermal_data
+    [get_nuclear_data, get_death_resources, get_thermal_data, get_city_code_geo] >> end
 
 with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging_pipeline:
     start = DummyOperator(
@@ -286,7 +286,7 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
     import_death_clean_data = PythonOperator(
         task_id='import_death_clean_data',
         dag=global_dag,
-        python_callable=load_death_data_from_ingestion,
+        python_callable=load_data_from_ingestion,
         op_kwargs={},
         depends_on_past=False,
     )
@@ -315,11 +315,9 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         depends_on_past=False,
     )
 
-
     start >> [import_nuclear_clean_data,import_thermal_clean_data, import_death_clean_data]
     import_death_clean_data >> cleanse_death_data
-    [import_nuclear_clean_data,import_thermal_clean_data, cleanse_death_data]   >> end
-
+    [import_nuclear_clean_data,import_thermal_clean_data, cleanse_death_data] >> end
 
 start_global = DummyOperator(
     task_id='start_global',
