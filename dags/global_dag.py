@@ -42,7 +42,7 @@ def pull_thermal_plants_data():
         if resource['format'] == 'csv':
             response = requests.get(resource['latest'])
             if response.status_code == 200:
-                with open(f'dags/data/ingestion/thermal_plants_{resource["title"]}.csv', 'w') as outfile:
+                with open(f'{INGESTION_DATA_PATH}thermal_plants_.csv', 'w') as outfile:
                     outfile.write(response.content.decode("utf-8"))
             else:
                 print(
@@ -92,7 +92,7 @@ def pull_nuclear_plants():
         if resource['format'] == 'csv':
             csv_resource = requests.get(resource['latest'])
             if csv_resource.status_code == 200:
-                with open(f'{INGESTION_DATA_PATH}nuclear_{resource["last_modified"]}.csv', 'w') as outfile:
+                with open(f'{INGESTION_DATA_PATH}nuclear.csv', 'w') as outfile:
                     outfile.write(csv_resource.content.decode("utf-8"))
             else:
                 print(f'Failed to extract nuclear plant data')
