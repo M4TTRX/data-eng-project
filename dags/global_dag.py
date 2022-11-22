@@ -9,10 +9,13 @@ from airflow.utils.task_group import TaskGroup
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
 THERMAL_DATASET_ID = '63587afb1cc488641390f68e'
 NUCLEAR_DATASET_ID = '63587afc1e8e90e9ce487174'
+CITY_GEO_DATA_ID = 'dbe8a621-a9c4-4bc3-9cae-be1699c5ff25'
 INGESTION_DATA_PATH = 'dags/data/ingestion/'
-GET_DEATH_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{DEATH_DATASET_ID}/'
-GET_THERMAL_DATASET_URL = f'https://www.data.gouv.fr/api/1/datasets/{THERMAL_DATASET_ID}/'
-GET_NUCLEAR_DATAET_URL = f'https://www.data.gouv.fr/api/1/datasets/{NUCLEAR_DATASET_ID}/'
+DATA_GOUV_BASE_URL = 'https://www.data.gouv.fr/api/1/datasets/'
+GET_DEATH_DATASET_URL = DATA_GOUV_BASE_URL + DEATH_DATASET_ID
+GET_THERMAL_DATASET_URL = DATA_GOUV_BASE_URL + THERMAL_DATASET_ID
+GET_NUCLEAR_DATASET_URL = DATA_GOUV_BASE_URL + NUCLEAR_DATASET_ID
+CITY_GEO_DATASET_URL = 'https://static.data.gouv.fr/resources/communes-de-france-base-des-codes-postaux/20200309-131459/communes-departement-region.csv'
 # DAG definition
 
 default_args_dict = {
@@ -48,6 +51,7 @@ def pull_thermal_plants_data():
                 print(
                     f'Failed to get thermal plants resource')
     print('Could not file resource in csv format')
+
 
 def pull_death_file_list():
     import requests
@@ -86,7 +90,8 @@ def pull_all_death_files(max_resource=5):
 
 def pull_nuclear_plants():
     import json
-    response = json.load(open(f'{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
+    response = json.load(
+        open(f'{INGESTION_DATA_PATH}nuclear_plants.json', 'r'))
     import requests
     for resource in response['resources']:
         if resource['format'] == 'csv':
@@ -103,7 +108,7 @@ def pull_nuclear_plants():
 # ===================
 
 
-with TaskGroup("ingestion_pipeline","data ingestion step",dag=global_dag) as ingestion_pipeline:
+with TaskGroup("ingestion_pipeline", "data ingestion step", dag=global_dag) as ingestion_pipeline:
     start = DummyOperator(
         task_id='start',
         dag=global_dag,
@@ -112,7 +117,7 @@ with TaskGroup("ingestion_pipeline","data ingestion step",dag=global_dag) as ing
     get_nuclear_json = BashOperator(
         task_id='get_nuclear_json',
         dag=global_dag,
-        bash_command=f'curl {GET_NUCLEAR_DATAET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
+        bash_command=f'curl {GET_NUCLEAR_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/nuclear_plants.json',
     )
 
     get_nuclear_data = PythonOperator(
@@ -138,7 +143,11 @@ with TaskGroup("ingestion_pipeline","data ingestion step",dag=global_dag) as ing
         trigger_rule='all_success',
         depends_on_past=False,
     )
-
+    get_city_code_geo = BashOperator(
+        task_id='get_city_code_geo',
+        dag=global_dag,
+        bash_command=f'curl {CITY_GEO_DATASET_URL} --output /opt/airflow/{INGESTION_DATA_PATH}/city_geo_loc.csv',
+    )
 
     get_death_resource_list = PythonOperator(
         task_id='get_death_resource_list',
