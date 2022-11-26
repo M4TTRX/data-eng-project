@@ -1,10 +1,10 @@
 # data-eng-project
 5IF INSA - Foundations of data engineering project: Correlation of deaths with power plants (nuclear and thermic) in metropolitan France.
 
-| Student name  | GitHub profile                                   |
-| :------------ | ------------------------------------------------ |
-| Matthieu ROUX | [M4TTRX](https://github.com/M4TTRX)              |
-| Ewen CHAILLAN | [EwenChaillann](https://github.com/EwenChaillann)|
+| Student name  | GitHub profile                                    |
+| :------------ | ------------------------------------------------- |
+| Matthieu ROUX | [M4TTRX](https://github.com/M4TTRX)               |
+| Ewen CHAILLAN | [EwenChaillann](https://github.com/EwenChaillann) |
 
 # Project Description
 
@@ -20,10 +20,11 @@ All the data we will be extracting comes from the french government's data wareh
 ## Getting started
 
 1. Ensure you have Docker installed and running
-2. Get your computer's user id by typing in ` id -u` in your bash terminal. As a window user you will have to run this command in your WSL terminal as it will not work on CMD or powershell.
-3. Update the `AIRFLOW_UID` in the .env file to the ID you obtained.
+2. Get your computer's user id by typing in `id -u` in your bash terminal. As a window user you will have to run this command in your WSL terminal as it will not work on CMD or powershell.
+3. Create a `.env` file, based on the `.template.env` file. Mae sure to update the `AIRFLOW_UID` in the .env file to the ID you obtained.
 4. Build and run the environment using the `docker-compose up` command (run it in the directory of the project). This step will take a while as a lot of images will be downloaded on your computer.
-5. You can now connect to [localhost:8080](http://localhost:8080/) to access the airflow dashboard, user and pwd are `airflow`.
+5. If they do not exist yet. Create a folder in your `/dags` folder called **ingestion**. Inside this folder create two sub folders: **staging** and **ingestion**.
+6. You can now connect to [localhost:8080](http://localhost:8080/) to access the airflow dashboard, user and pwd are `airflow`.
 
 ## Environment info
 | Service  | Address:Port           | Image        |

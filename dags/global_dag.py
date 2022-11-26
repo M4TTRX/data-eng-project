@@ -6,7 +6,6 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.task_group import TaskGroup
 import pandas as pd
-import numpy as np
 pd.options.mode.chained_assignment = None  # default='warn'
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
