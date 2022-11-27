@@ -131,5 +131,6 @@ dmypy.json
 # logs
 logs/scheduler/latest
 
-# downloaded data 
-dags/data/ingestion/
+# generated sql files
+dags/sql/tmp/**
+!dags/sql/tmp/**.gitkeep

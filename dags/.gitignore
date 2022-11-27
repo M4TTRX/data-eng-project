@@ -1,5 +1,6 @@
-*.sql
 *.csv
+*.json
+*.txt
 *.xlsx
 *~
 __pycache__
