@@ -1,9 +1,11 @@
+from cmath import nan
 import airflow
 import datetime
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -20,6 +22,9 @@ GET_NUCLEAR_DATAET_URL = 'https://www.data.gouv.fr/api/1/datasets/63587afc1e8e90
 CITY_GEO_DATASET_URL = 'https://static.data.gouv.fr/resources/communes-de-france-base-des-codes-postaux/20200309-131459/communes-departement-region.csv'
 STAGING_DATA_PATH = 'dags/data/staging/'
 
+DEATH_INSERTION_QUERIES = 'death_insert.sql'
+DEATH_INSERTION_QUERIES_PATH = f'dags/sql/tmp/{DEATH_INSERTION_QUERIES}'
+
 
 # DAG definition
 
@@ -28,18 +33,19 @@ default_args_dict = {
     'concurrency': 1,
     'schedule_interval': None,
     'retries': 1,
-    'retry_delay': datetime.timedelta(minutes=5),
+    'retry_delay': datetime.timedelta(seconds=10),
 }
 
 global_dag = DAG(
     dag_id='global_dag',
     default_args=default_args_dict,
     catchup=False,
+    template_searchpath=['/opt/airflow/dags/']
 )
 
 # Python functions
 # ===================
-def load_and_clean_thermal_datas():
+def _import_thermal_clean_data():
     data_1 = pd.read_csv(
         './dags/data/ingestion/thermal_plants_.csv', error_bad_lines=False, sep=';')
     data_1 = data_1.drop(columns={'perimetre_spatial', 'filiere', 'combustible',
@@ -49,7 +55,7 @@ def load_and_clean_thermal_datas():
     data_1.to_csv('./dags/data/staging/thermal_plants_clean.csv')
 
 
-def load_and_clean_nuclear_datas():
+def _import_nuclear_clean_data():
     data_1 = pd.read_csv('./dags/data/ingestion/nuclear.csv',
                          error_bad_lines=False, sep=';')
     data_1 = data_1.drop(columns={'reserve_secondaire_maximale', 'puissance_minimum_de_conception',
@@ -64,7 +70,7 @@ def get_redis_client():
     return redis.Redis(host='redis', port=6379, db=0)
 
 
-def load_data_from_ingestion():
+def _load_data_from_ingestion():
     import os
     death_files = [os.path.join(root, name)
                    for root, dirs, files in os.walk(INGESTION_DATA_PATH)
@@ -90,7 +96,8 @@ def load_data_from_ingestion():
             dead_person = {
                 'id': hashlib.sha1(line[:80].encode()).hexdigest(),
                 'location': line[162:167].strip(),
-                'date': line[154:162].strip()
+                'death_date': line[154:162].strip(),
+                'birth_date': line[81:89].strip()
             }
             r.lpush('death_raw', json.dumps(dead_person))
 
@@ -99,32 +106,32 @@ def load_data_from_ingestion():
     # preliminary processing and store
     return
 
-
+def to_postgres_date(raw_date : str):
+    return raw_date[0:4] + '-' + raw_date[4:6] + '-' + raw_date[6:8]
 def _cleanse_death_data():
     import json
     r = get_redis_client()
     # load imports from redis
     result = r.lrange('death_raw', 0, -1)
-    print(result)
-    data = [json.loads(element.decode("utf-8"))
+    death_data = [json.loads(element.decode("utf-8"))
             for element in result]
-    print(data)
     import pandas as pd
-    df = pd.DataFrame(data)
     print("Successfully loaded death data")
-    city_info = pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv')
-    city_info = city_info.rename(columns={'code_commune_INSEE': 'location'})
-    merged_death_data = df.merge(
-        city_info[['location', 'latitude', 'longitude']], on='location', how='left')
+    insee_code_to_geo = {str(loc['code_commune_INSEE']): (str(loc['longitude']), str(loc['latitude'])) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
+    query = ''
+    for death in death_data:
+        if death['location'] in insee_code_to_geo:
+            location = insee_code_to_geo[death['location']]
+            if location[0] == nan or location[1] == nan:
+                continue
+            query += f"INSERT INTO users VALUES ('{death['id']}', '{to_postgres_date(death['birth_date'])}', '{to_postgres_date(death['death_date'])}', '{location[0]}', '{location[1]}');\n"
 
-    # drop rows where the location led to no known cities, this occures mostly with INSEE codes that are over 99000
-    merged_death_data = merged_death_data[merged_death_data['latitude'].notna(
-    )]
-    merged_death_data = merged_death_data[merged_death_data['longitude'].notna(
-    )]
-
-    merged_death_data.to_csv(f'{STAGING_DATA_PATH}/clean_death_data.csv')
-    print("Successfully location to geopoints")
+    # Save sql querys
+    import os
+    if (os.path.exists(DEATH_INSERTION_QUERIES_PATH)):
+        os.remove(DEATH_INSERTION_QUERIES_PATH)
+    with open(DEATH_INSERTION_QUERIES_PATH, "w") as f : f.write(query)
+    print("Created SQL query")
 
 def pull_thermal_plants_data():
     import json
@@ -282,10 +289,32 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         trigger_rule='all_success'
     )
 
-    import_death_clean_data = PythonOperator(
-        task_id='import_death_clean_data',
+    # Postgres operators
+
+    create_death_table = PostgresOperator(
+        task_id='create_death_table',
         dag=global_dag,
-        python_callable=load_data_from_ingestion,
+        postgres_conn_id='postgres_default',
+        sql='sql/create_death_table.sql',
+        trigger_rule='none_failed',
+        autocommit=True,
+    )
+
+    create_power_plants_table = PostgresOperator(
+        task_id='create_power_plants_table',
+        dag=global_dag,
+        postgres_conn_id='postgres_default',
+        sql='sql/create_power_plant_table.sql',
+        trigger_rule='none_failed',
+        autocommit=True,
+    )
+
+    # Python operators
+
+    load_data_from_ingestion = PythonOperator(
+        task_id='load_data_from_ingestion',
+        dag=global_dag,
+        python_callable=_load_data_from_ingestion,
         op_kwargs={},
         depends_on_past=False,
     )
@@ -297,25 +326,25 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         op_kwargs={},
         depends_on_past=False,
     )
+
     import_thermal_clean_data = PythonOperator(
         task_id='import_thermal_clean_data',
         dag=global_dag,
-        python_callable=load_and_clean_thermal_datas,
+        python_callable=_import_thermal_clean_data,
         op_kwargs={},
         depends_on_past=False,
     )
-
 
     import_nuclear_clean_data = PythonOperator(
         task_id='import_nuclear_clean_data',
         dag=global_dag,
-        python_callable=load_and_clean_nuclear_datas,
+        python_callable=_import_nuclear_clean_data,
         op_kwargs={},
         depends_on_past=False,
     )
 
-    start >> [import_nuclear_clean_data,import_thermal_clean_data, import_death_clean_data]
-    import_death_clean_data >> cleanse_death_data
+    start >> [import_nuclear_clean_data,import_thermal_clean_data, create_death_table]
+    create_death_table >> load_data_from_ingestion >> cleanse_death_data
     [import_nuclear_clean_data,import_thermal_clean_data, cleanse_death_data] >> end
 
 start_global = DummyOperator(
