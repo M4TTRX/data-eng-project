@@ -117,14 +117,15 @@ def _cleanse_death_data():
             for element in result]
     import pandas as pd
     print("Successfully loaded death data")
-    insee_code_to_geo = {str(loc['code_commune_INSEE']): (str(loc['longitude']), str(loc['latitude'])) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
+    insee_code_to_geo = {loc['code_commune_INSEE']: (loc['longitude'], loc['latitude']) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
     query = ''
     for death in death_data:
         if death['location'] in insee_code_to_geo:
             location = insee_code_to_geo[death['location']]
-            if location[0] == nan or location[1] == nan:
+            import math
+            if math.isnan(location[0]) or math.isnan(location[1]):
                 continue
-            query += f"INSERT INTO users VALUES ('{death['id']}', '{to_postgres_date(death['birth_date'])}', '{to_postgres_date(death['death_date'])}', '{location[0]}', '{location[1]}');\n"
+            query += f"INSERT INTO deaths VALUES ('{death['id']}', '{to_postgres_date(death['birth_date'])}', '{to_postgres_date(death['death_date'])}', '{location[0]}', '{location[1]}');\n"
 
     # Save sql querys
     import os
