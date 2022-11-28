@@ -8,6 +8,8 @@ from airflow.operators.python_operator import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 import pandas as pd
+from py2neo import Graph
+from py2neo import Node
 pd.options.mode.chained_assignment = None  # default='warn'
 
 DEATH_DATASET_ID = '5de8f397634f4164071119c5'
@@ -45,14 +47,40 @@ global_dag = DAG(
 
 # Python functions
 # ===================
+
+def create_neo():
+    try:
+        graph = Graph("bolt://neo:7687")
+        print(graph)
+    except:
+        print("Error Connection to Neo4j DB!!")
+
+    data_thermal = pd.read_csv('./dags/data/staging/thermal_plants_clean.csv')
+    data_nuclear = pd.read_csv('./dags/data/staging/nuclear_clean_datas.csv')
+    #graph.delete_all()
+    print('graph deleted')
+    index = 0
+    for plant in data_thermal['plant']:
+        thermal_node = Node("Plant", id=index, sector=data_thermal['sector'][index],power=data_thermal['power_in_MW'][index],position=data_thermal['position'][index])
+        graph.create(thermal_node)
+        index+=1
+    index = 0
+    print('graph OK thermal')
+    for plant in data_thermal['plant']:
+        nuclear_node = Node("Plant", id=index, sector=data_nuclear['sector'][index],power=data_nuclear['power_in_MW'][index],position=data_nuclear['position'][index])
+        graph.create(nuclear_node)
+        index+=1
+    print('graph OK nuclear')
+
 def _import_thermal_clean_data():
     data_1 = pd.read_csv(
         './dags/data/ingestion/thermal_plants_.csv', error_bad_lines=False, sep=';')
     data_1 = data_1.drop(columns={'perimetre_spatial', 'filiere', 'combustible',
                          'reserve_secondaire_maximale', 'sous_filiere', 'unite'})
     data_1 = data_1.rename(columns={'centrale': 'plant', 'point_gps_wsg84': 'position', 'commune': 'city',
-                           'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power (MW)'})
+                           'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power_in_MW'})
     data_1.to_csv('./dags/data/staging/thermal_plants_clean.csv')
+
 
 
 def _import_nuclear_clean_data():
@@ -61,7 +89,7 @@ def _import_nuclear_clean_data():
     data_1 = data_1.drop(columns={'reserve_secondaire_maximale', 'puissance_minimum_de_conception',
                          'sub_sector', 'perimetre_spatial', 'combustible', 'filiere', 'unite'})
     data_1 = data_1.rename(columns={'centrale': 'plant', 'sous_filiere': 'sub_sector', 'contrat_programme': 'contract', 'point_gps_wsg84': 'position',
-                           'commune': 'city', 'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power (MW)'})
+                           'commune': 'city', 'date_de_mise_en_service_industrielle': 'start_date', 'puissance_installee': 'power_in_MW'})
     data_1.to_csv('./dags/data/staging/nuclear_clean_datas.csv')
 
 
@@ -344,9 +372,18 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         depends_on_past=False,
     )
 
+    create_neo_operator = PythonOperator(
+        task_id='create_neo_operator',
+        dag=global_dag,
+        python_callable=create_neo,
+        op_kwargs={},
+        depends_on_past=False,
+    )
+
     start >> [import_nuclear_clean_data,import_thermal_clean_data, create_death_table]
     create_death_table >> load_data_from_ingestion >> cleanse_death_data
-    [import_nuclear_clean_data,import_thermal_clean_data, cleanse_death_data] >> end
+    [import_nuclear_clean_data,import_thermal_clean_data] >> create_neo_operator
+    [create_neo_operator, cleanse_death_data] >> end
 
 start_global = DummyOperator(
     task_id='start_global',

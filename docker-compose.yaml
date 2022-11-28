@@ -74,6 +74,16 @@ x-airflow-common: &airflow-common
       condition: service_healthy
 
 services:
+  neo:
+    image: neo4j
+    ports:
+        - 7474:7474
+        - 7687:7687
+    restart: always
+    environment:
+      - NEO4J_AUTH=none
+    volumes:
+      - ./neo4j/data:/data
   postgres:
     image: postgres:13
     ports:

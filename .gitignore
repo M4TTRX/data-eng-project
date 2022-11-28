@@ -134,3 +134,5 @@ logs/scheduler/latest
 # generated sql files
 dags/sql/tmp/**
 !dags/sql/tmp/**.gitkeep
+
+neo4j/**
