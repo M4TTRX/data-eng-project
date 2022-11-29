@@ -4,3 +4,7 @@
 *.xlsx
 *~
 __pycache__
+
+!death_deces-2022-m07.txt
+!nuclear.csv
+!thermal_plants_.csv
