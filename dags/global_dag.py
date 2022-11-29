@@ -126,7 +126,7 @@ def _cleanse_death_data():
             for element in result]
     import pandas as pd
     print("Successfully loaded death data")
-    insee_code_to_geo = {loc['code_commune_INSEE']: (loc['longitude'], loc['latitude']) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
+    insee_code_to_geo = {loc['code_commune_INSEE']: (loc['latitude'], loc['longitude']) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
     query = ''
     count = 0
     for death in death_data:
