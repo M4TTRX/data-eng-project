@@ -50,7 +50,7 @@ global_dag = DAG(
 
 def create_neo():
     try:
-        graph = Graph("bolt://neo:7687")
+        graph = Graph("bolt://localhost:7687")
         print(graph)
     except:
         print("Error Connection to Neo4j DB!!")
