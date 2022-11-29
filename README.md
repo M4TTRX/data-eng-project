@@ -10,6 +10,21 @@
 
 The goal of the project is to create a data pipeline that ingests data of deaths in france along with place of death and locations of active nuclear and thermal power plants  in france and see if there is any correlation between the two. We don't have any pre existing work that proves that there is or isn't a correlation but we thought it would be fun to see. 
 
+## Project report
+
+Project report available [here](docs/Report.md)
+
+Presentation PDF available [here](docs/data%20_eng_presentation.pdf)
+
+## Checklist
+
+- [ ] repository with the code, well documented
+- [ ] docker-compose file to run the environment
+- [ ] detailed description of the various steps
+- [ ] report (Can be in the Repository README) with the project design steps (divided per area)
+- [ ] Example dataset: the project testing should work offline, i.e., you need to have some sample data points.
+- [x] slides for the project presentation. You can do them too in markdown too.
+- [ ] 
 ## Data Sources:
 All the data we will be extracting comes from the french government's data warehouse: [data.gouv.fr](https://www.data.gouv.fr/fr/): 
 - [Nuclear reactors adn their location](https://www.data.gouv.fr/fr/datasets/centrales-de-production-nucleaire-dedf-sa/)
