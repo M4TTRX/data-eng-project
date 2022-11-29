@@ -23,7 +23,9 @@ CITY_GEO_DATASET_URL = 'https://static.data.gouv.fr/resources/communes-de-france
 STAGING_DATA_PATH = 'dags/data/staging/'
 
 DEATH_INSERTION_QUERIES = 'death_insert.sql'
+PLANT_INSERTION_QUERIES = 'plant_insert.sql'
 DEATH_INSERTION_QUERIES_PATH = f'dags/sql/tmp/{DEATH_INSERTION_QUERIES}'
+PLANT_INSERTION_QUERIES_PATH = f'dags/sql/tmp/{PLANT_INSERTION_QUERIES}'
 
 
 # DAG definition
@@ -108,7 +110,7 @@ def _load_data_from_ingestion():
 
 def to_postgres_date(raw_date : str):
     try:
-        return datetime.datetime.strptime(raw_date, '%Y%m%d')
+        return str(datetime.datetime.strptime(raw_date, '%Y%m%d'))[:10]
     except:
         return None
 
@@ -125,29 +127,34 @@ def _cleanse_death_data():
     query = ''
     count = 0
     for death in death_data:
-        count += 1
-        if count > 50:
-            break
         if death['location'] in insee_code_to_geo:
             location = insee_code_to_geo[death['location']]
 
             # convert date to postgres date format
             birth_date = to_postgres_date(death['birth_date'])
-            print(birth_date)
             death_date = to_postgres_date(death['death_date'])
 
             # drop invalid data
             import math
-            if math.isnan(location[0]) or math.isnan(location[1]):
+            if math.isnan(location[0]) or math.isnan(location[1]) or birth_date is None or death_date is None:
                 continue
-            query += f"INSERT INTO deaths VALUES ('{death['id']}', NULL, NULL, '{location[0]}', '{location[1]}');\n"
+            query += f"INSERT INTO deaths VALUES ('{death['id']}', '{birth_date}', '{death_date}', '{location[0]}', '{location[1]}') ON CONFLICT DO NOTHING;\n"
+            # query += f"INSERT INTO deaths VALUES ('{death['id']}', '{birth_date}', '{death_date}', '{location[0]}', '{location[1]}') ON DUPLICATE KEY UPDATE latitude='{location[0]}', longitude='{location[1]}', date_of_death='{death_date}';\n"
 
     # Save sql querys
+
+    with open(DEATH_INSERTION_QUERIES_PATH, "w") as f : f.write(query)
+    print("Created SQL query")
+
+def _clean_tmp_death_files():
+    r = get_redis_client()
+    result = r.lrange('death_raw', 0, -1)
+    for _ in result : r.lpop('death_raw')
     import os
     if (os.path.exists(DEATH_INSERTION_QUERIES_PATH)):
         os.remove(DEATH_INSERTION_QUERIES_PATH)
-    with open(DEATH_INSERTION_QUERIES_PATH, "w") as f : f.write(query)
-    print("Created SQL query")
+
+
 
 def pull_thermal_plants_data():
     import json
@@ -165,6 +172,37 @@ def pull_thermal_plants_data():
                     f'Failed to get thermal plants resource')
     print('Could not file resource in csv format')
 
+def _persist_plants_in_db():
+    df_thermal = pd.read_csv('dags/data/staging/thermal_plants_clean.csv')
+    # drop duplicate values of in the plant column of df_thermal
+    df_thermal.drop_duplicates(subset=['plant'], inplace=True)
+    
+    df_nuclear = pd.read_csv('dags/data/staging/nuclear_clean_datas.csv')
+    # drop duplicate values of in the plant column of df_nuclear
+    df_nuclear.drop_duplicates(subset=['plant'], inplace=True)
+    
+    
+    query = ''
+    for _, plant in df_thermal.iterrows():
+        start_date = to_postgres_date(plant['start_date'])
+        if start_date is None:
+            continue
+        position = plant['position'].split(',')
+        query += f"INSERT INTO power_plants VALUES ('{plant['plant']}', 'THERMAL', '{plant['fuel']}', '{start_date}', '{plant['power (MW)']}', '{position[0]}', '{position[1]}') ON CONFLICT DO NOTHING;\n;\n"
+    for _, plant in df_nuclear.iterrows():
+        start_date = to_postgres_date(plant['start_date'])
+        if start_date is None:
+            continue
+        position = plant['position'].split(',')
+        query += f"INSERT INTO power_plants VALUES ('{plant['plant']}', 'NUCLEAR', '{plant['fuel']}', '{start_date}', '{plant['power (MW)']}', '{position[0]}', '{position[1]}') ON CONFLICT DO NOTHING;\n;\n"
+    
+    # Save sql querys
+    import os
+    if (os.path.exists(PLANT_INSERTION_QUERIES_PATH)):
+        os.remove(PLANT_INSERTION_QUERIES_PATH)
+    with open(PLANT_INSERTION_QUERIES_PATH, "w") as f:
+        f.write(query)
+    print("Created SQL query")
 
 def pull_death_file_list():
     import requests
@@ -352,6 +390,14 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         depends_on_past=False,
     )
 
+    clean_tmp_death_files = PythonOperator(
+        task_id='clean_tmp_death_files',
+        dag=global_dag,
+        python_callable=_clean_tmp_death_files,
+        op_kwargs={},
+        depends_on_past=False,
+    )
+
     import_thermal_clean_data = PythonOperator(
         task_id='import_thermal_clean_data',
         dag=global_dag,
@@ -369,9 +415,9 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
     )
 
     start >> [import_nuclear_clean_data,import_thermal_clean_data, create_death_table]
-    create_death_table >> load_data_from_ingestion >> cleanse_death_data >> store_deaths_in_postgres
+    create_death_table >> load_data_from_ingestion >> cleanse_death_data >> store_deaths_in_postgres >> clean_tmp_death_files
     [import_nuclear_clean_data, import_thermal_clean_data,
-        store_deaths_in_postgres] >> end
+        clean_tmp_death_files] >> end
 
 start_global = DummyOperator(
     task_id='start_global',
