@@ -107,7 +107,11 @@ def _load_data_from_ingestion():
     return
 
 def to_postgres_date(raw_date : str):
-    return raw_date[0:4] + '-' + raw_date[4:6] + '-' + raw_date[6:8]
+    try:
+        return datetime.datetime.strptime(raw_date, '%Y%m%d')
+    except:
+        return None
+
 def _cleanse_death_data():
     import json
     r = get_redis_client()
@@ -119,13 +123,24 @@ def _cleanse_death_data():
     print("Successfully loaded death data")
     insee_code_to_geo = {loc['code_commune_INSEE']: (loc['longitude'], loc['latitude']) for _, loc in pd.read_csv(f'{INGESTION_DATA_PATH}city_geo_loc.csv').iterrows()}
     query = ''
+    count = 0
     for death in death_data:
+        count += 1
+        if count > 50:
+            break
         if death['location'] in insee_code_to_geo:
             location = insee_code_to_geo[death['location']]
+
+            # convert date to postgres date format
+            birth_date = to_postgres_date(death['birth_date'])
+            print(birth_date)
+            death_date = to_postgres_date(death['death_date'])
+
+            # drop invalid data
             import math
             if math.isnan(location[0]) or math.isnan(location[1]):
                 continue
-            query += f"INSERT INTO deaths VALUES ('{death['id']}', '{to_postgres_date(death['birth_date'])}', '{to_postgres_date(death['death_date'])}', '{location[0]}', '{location[1]}');\n"
+            query += f"INSERT INTO deaths VALUES ('{death['id']}', NULL, NULL, '{location[0]}', '{location[1]}');\n"
 
     # Save sql querys
     import os
@@ -310,6 +325,15 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
         autocommit=True,
     )
 
+    store_deaths_in_postgres = PostgresOperator(
+        task_id='store_deaths_in_postgres',
+        dag=global_dag,
+        postgres_conn_id='postgres_default',
+        sql=f'sql/tmp/{DEATH_INSERTION_QUERIES}',
+        trigger_rule='none_failed',
+        autocommit=True,
+    )
+
     # Python operators
 
     load_data_from_ingestion = PythonOperator(
@@ -345,8 +369,9 @@ with TaskGroup("staging_pipeline","data staging step",dag=global_dag) as staging
     )
 
     start >> [import_nuclear_clean_data,import_thermal_clean_data, create_death_table]
-    create_death_table >> load_data_from_ingestion >> cleanse_death_data
-    [import_nuclear_clean_data,import_thermal_clean_data, cleanse_death_data] >> end
+    create_death_table >> load_data_from_ingestion >> cleanse_death_data >> store_deaths_in_postgres
+    [import_nuclear_clean_data, import_thermal_clean_data,
+        store_deaths_in_postgres] >> end
 
 start_global = DummyOperator(
     task_id='start_global',
